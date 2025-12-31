@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SUSS Timetable → ICS</title>
+  <style>
+    :root{
+      --bg:#0b1020; --card:rgba(255,255,255,0.06); --bd:rgba(255,255,255,0.12);
+      --txt:#e9ecff; --mut:#b9c0ff; --btn:#5a67ff; --btn2:rgba(255,255,255,0.08);
+    }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--txt); }
+    .wrap{ max-width:1080px; margin:0 auto; padding:26px 16px 44px; }
+    h1{ margin:0 0 8px; font-size:24px; }
+    p{ margin:8px 0 14px; color:var(--mut); line-height:1.45; }
+    .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; }
+    textarea{
+      width:100%; min-height:320px; resize:vertical; padding:12px;
+      border-radius:12px; border:1px solid rgba(255,255,255,0.15);
+      background:rgba(0,0,0,0.25); color:var(--txt);
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      font-size:13px; line-height:1.35;
+    }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+    button{
+      padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.18);
+      background:var(--btn); color:white; font-weight:700; cursor:pointer;
+    }
+    button.secondary{ background:var(--btn2); color:var(--txt); }
+    button:disabled{ opacity:0.55; cursor:not-allowed; }
+    button:hover:not(:disabled){ filter:brightness(1.08); }
+    .opt{ display:flex; gap:8px; align-items:center; padding:8px 10px; border-radius:12px; border:1px solid var(--bd); background:rgba(255,255,255,0.05); }
+    .opt input{ transform:translateY(1px); }
+    .small{ font-size:12px; color:var(--mut); }
+    .panel{ margin-top:12px; background:rgba(0,0,0,0.25); border:1px solid var(--bd); border-radius:12px; padding:10px; }
+    .panel h2{ margin:0 0 8px; font-size:14px; color:var(--txt); }
+    .status{ white-space:pre-wrap; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:var(--txt); }
+    table{ width:100%; border-collapse:collapse; font-size:13px; }
+    th,td{ padding:10px 8px; border-bottom:1px solid rgba(255,255,255,0.10); vertical-align:top; }
+    th{ text-align:left; color:var(--mut); font-size:12px; letter-spacing:0.03em; text-transform:uppercase; }
+    .pill{ display:inline-block; padding:3px 8px; border:1px solid rgba(255,255,255,0.16); border-radius:999px; background:rgba(255,255,255,0.06); font-size:12px; color:var(--mut); }
+    .hint{ margin-top:10px; font-size:12px; color:var(--mut); }
+
+    .metaRow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .field{
+      display:flex; flex-direction:column; gap:6px;
+      padding:10px; border-radius:12px; border:1px solid var(--bd);
+      background:rgba(255,255,255,0.05);
+      min-width: 220px;
+    }
+    .field label{ font-size:12px; color:var(--mut); }
+    .field input{
+      padding:10px 10px; border-radius:10px;
+      border:1px solid rgba(255,255,255,0.15);
+      background:rgba(0,0,0,0.25); color:var(--txt);
+      outline:none;
+    }
+    .field input::placeholder{ color:rgba(185,192,255,0.7); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>SUSS Timetable → ICS Generator</h1>
+    <p>
+      Paste your timetable copied from the student portal. Choose <b>Entire timetable</b> or <b>Single module</b>.
+      Click <b>Preview</b>, then <b>Download / Share .ics</b>.
+    </p>
+
+    <div class="card">
+      <textarea id="input" placeholder="Paste timetable text here... (tab-separated rows like your portal copy)"></textarea>
+
+      <div class="row">
+        <button id="paste" class="secondary">Paste from clipboard</button>
+        <button id="preview" class="secondary">Preview</button>
+        <button id="download" disabled>Download / Share .ics</button>
+
+        <label class="opt" title="Export format: full timetable includes module columns; single module does not">
+          <input type="radio" name="mode" id="modeFull" value="full" checked />
+          <span>Entire timetable</span>
+        </label>
+
+        <label class="opt">
+          <input type="radio" name="mode" id="modeSingle" value="single" />
+          <span>Single module</span>
+        </label>
+
+        <label class="opt" title="Adds a reminder for each event">
+          <input type="checkbox" id="alarm" />
+          <span>Add 15-min reminder</span>
+        </label>
+
+        <label class="opt" title="Put Course Group in the title">
+          <input type="checkbox" id="groupInTitle" checked />
+          <span>Include group in title</span>
+        </label>
+
+        <label class="opt" title="Put venue in the title (helps if calendar UI hides location)">
+          <input type="checkbox" id="venueInTitle" />
+          <span>Include venue in title</span>
+        </label>
+
+        <label class="opt" title="Removes the standard '[Lesson is recorded ...]' notice from Remarks/Description">
+          <input type="checkbox" id="stripRecorded" checked />
+          <span>Remove “Lesson is recorded…”</span>
+        </label>
+
+        <span class="small">Timezone: Asia/Singapore</span>
+      </div>
+
+      <!-- Single-module metadata (only shown in single mode) -->
+      <div id="singleMeta" class="metaRow" style="display:none;">
+        <div class="field">
+          <label for="singleCourse">Module Code (required)</label>
+          <input id="singleCourse" placeholder="e.g. ICT162" />
+        </div>
+        <div class="field">
+          <label for="singleGroup">Course Group (optional)</label>
+          <input id="singleGroup" placeholder="e.g. TG01" />
+        </div>
+        <div class="field">
+          <label for="singleSemType">Semester Type (optional)</label>
+          <input id="singleSemType" placeholder="e.g. Regular" />
+        </div>
+      </div>
+
+      <div class="panel" id="previewPanel" style="display:none;">
+        <h2>Preview</h2>
+        <div class="status" id="summary"></div>
+        <div style="overflow:auto; margin-top:8px;">
+          <table id="previewTable"></table>
+        </div>
+      </div>
+
+      <div class="panel" id="errorPanel" style="display:none;">
+        <h2>Notes / Skipped rows</h2>
+        <div class="status" id="errors"></div>
+      </div>
+
+      <div class="hint" id="mobileHint" style="display:none;">
+        Phone tip: If a share sheet appears, choose <b>Save to Files</b> (iPhone) or your file app, then open the .ics to import.
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const TZID = "Asia/Singapore";
+
+  const monthMap = {
+    JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
+    JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
+  };
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+
+  function toICSDateTimeLocal({ y, m, d, hh, mm }) {
+    return `${y}${pad2(m)}${pad2(d)}T${pad2(hh)}${pad2(mm)}00`;
+  }
+
+  function toICSStampUTC(date = new Date()) {
+    const y = date.getUTCFullYear();
+    const m = date.getUTCMonth() + 1;
+    const d = date.getUTCDate();
+    const hh = date.getUTCHours();
+    const mm = date.getUTCMinutes();
+    const ss = date.getUTCSeconds();
+    return `${y}${pad2(m)}${pad2(d)}T${pad2(hh)}${pad2(mm)}${pad2(ss)}Z`;
+  }
+
+  function escapeICS(text) {
+    return String(text ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "")
+      .replace(/,/g, "\\,")
+      .replace(/;/g, "\\;");
+  }
+
+  function foldLine(line) {
+    const max = 74;
+    if (line.length <= max) return line;
+    let out = "";
+    let i = 0;
+    while (i < line.length) {
+      const chunk = line.slice(i, i + max);
+      out += (i === 0 ? "" : "\r\n ") + chunk;
+      i += max;
+    }
+    return out;
+  }
+
+  function parseDate(dstr) {
+    const m = dstr.trim().toUpperCase().match(/^(\d{1,2})\s+([A-Z]{3})\s+(\d{4})$/);
+    if (!m) return null;
+    const d = parseInt(m[1], 10);
+    const mon = monthMap[m[2]];
+    const y = parseInt(m[3], 10);
+    if (!mon) return null;
+    return { y, m: mon, d };
+  }
+
+  function parseTime(tstr) {
+    const m = tstr.trim().toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (!m) return null;
+    let hh = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const ap = m[3];
+    if (hh === 12) hh = 0;
+    if (ap === "PM") hh += 12;
+    return { hh, mm };
+  }
+
+  function buildVTimezoneAsiaSingapore() {
+    return [
+      "BEGIN:VTIMEZONE",
+      "TZID:Asia/Singapore",
+      "X-LIC-LOCATION:Asia/Singapore",
+      "BEGIN:STANDARD",
+      "TZOFFSETFROM:+0800",
+      "TZOFFSETTO:+0800",
+      "TZNAME:SGT",
+      "DTSTART:19700101T000000",
+      "END:STANDARD",
+      "END:VTIMEZONE"
+    ].join("\r\n");
+  }
+
+  function stripRecordedNotice(text) {
+    return String(text ?? "").replace(
+      /\[\s*Lesson\s+is\s+recorded[\s\S]*?attendance-?management\s+purposes\.\s*\]\s*/gi,
+      ""
+    ).trim();
+  }
+
+  // --- MODE HELPERS ---
+  function getMode() {
+    return document.getElementById("modeSingle").checked ? "single" : "full";
+  }
+
+  function getSingleMeta() {
+    const course = (document.getElementById("singleCourse").value || "").trim().toUpperCase();
+    const group = (document.getElementById("singleGroup").value || "").trim().toUpperCase();
+    const semType = (document.getElementById("singleSemType").value || "").trim();
+
+    return { course, group, semType };
+  }
+
+  // --- PARSERS ---
+  function parseTimetableFull(raw) {
+    const lines = raw
+      .replace(/\r/g, "")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    const events = [];
+    const errors = [];
+
+    for (const line of lines) {
+      if (/^S\/N\s+COURSE\s+CODE/i.test(line)) continue;
+      if (/^TIMETABLE\s+DETAILS/i.test(line)) continue;
+      if (!/^\d+\t/.test(line)) continue;
+
+      const parts0 = line.split("\t").map(s => s.trim());
+      if (parts0.length < 10) {
+        errors.push(`Not enough columns (full mode): ${line}`);
+        continue;
+      }
+
+      const parts = parts0.slice(0, 9);
+      parts.push(parts0.slice(9).join(" | "));
+
+      const [sn, course, group, semType, dateStr, dayStr, timeFromStr, timeToStr, venueRaw, remarksRaw] = parts;
+
+      const date = parseDate(dateStr);
+      const tFrom = parseTime(timeFromStr);
+      const tTo = parseTime(timeToStr);
+
+      if (!date || !tFrom || !tTo) {
+        errors.push(`Bad date/time (full mode): ${line}`);
+        continue;
+      }
+
+      const venue = (venueRaw && venueRaw !== "-" ? venueRaw : "");
+      const remarks = remarksRaw || "";
+
+      events.push({ sn, course, group, semType, dateStr, dayStr, date, tFrom, tTo, venue, remarks });
+    }
+
+    return { events, errors };
+  }
+
+  function parseTimetableSingle(raw, meta) {
+    const lines = raw
+      .replace(/\r/g, "")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    const events = [];
+    const errors = [];
+
+    // expected columns:
+    // S/N | Date | Day | Time (From) | Time (To) | Venue | Remarks
+    for (const line of lines) {
+      if (/^S\/N\s+DATE/i.test(line)) continue;
+      if (/^TIMETABLE\s+DETAILS/i.test(line)) continue;
+      if (!/^\d+\t/.test(line)) continue;
+
+      const parts0 = line.split("\t").map(s => s.trim());
+      if (parts0.length < 7) {
+        errors.push(`Not enough columns (single mode): ${line}`);
+        continue;
+      }
+
+      const parts = parts0.slice(0, 6);
+      parts.push(parts0.slice(6).join(" | ")); // merge extra into remarks
+
+      const [sn, dateStr, dayStr, timeFromStr, timeToStr, venueRaw, remarksRaw] = parts;
+
+      const date = parseDate(dateStr);
+      const tFrom = parseTime(timeFromStr);
+      const tTo = parseTime(timeToStr);
+
+      if (!date || !tFrom || !tTo) {
+        errors.push(`Bad date/time (single mode): ${line}`);
+        continue;
+      }
+
+      const venue = (venueRaw && venueRaw !== "-" ? venueRaw : "");
+      const remarks = remarksRaw || "";
+
+      events.push({
+        sn,
+        course: meta.course,
+        group: meta.group,
+        semType: meta.semType,
+        dateStr, dayStr, date, tFrom, tTo, venue, remarks
+      });
+    }
+
+    return { events, errors };
+  }
+
+  function parseTimetableByMode(raw) {
+    const mode = getMode();
+    if (mode === "full") return parseTimetableFull(raw);
+
+    const meta = getSingleMeta();
+    if (!meta.course) {
+      return {
+        events: [],
+        errors: ["Single module mode: please fill in Module Code (e.g. ICT162) above the preview."]
+      };
+    }
+    return parseTimetableSingle(raw, meta);
+  }
+
+  function buildICS(events, opts) {
+    const dtstamp = toICSStampUTC(new Date());
+
+    const lines = [];
+    lines.push("BEGIN:VCALENDAR");
+    lines.push("VERSION:2.0");
+    lines.push("PRODID:-//SUSS Timetable to ICS//EN");
+    lines.push("CALSCALE:GREGORIAN");
+    lines.push("METHOD:PUBLISH");
+    lines.push(buildVTimezoneAsiaSingapore());
+
+    for (const ev of events) {
+      const uid = `${ev.course || "MODULE"}-${ev.group || "NA"}-${ev.date.y}${pad2(ev.date.m)}${pad2(ev.date.d)}-${pad2(ev.tFrom.hh)}${pad2(ev.tFrom.mm)}-${Math.random().toString(16).slice(2)}@suss-timetable`;
+
+      const dtstart = toICSDateTimeLocal({ ...ev.date, hh: ev.tFrom.hh, mm: ev.tFrom.mm });
+      const dtend   = toICSDateTimeLocal({ ...ev.date, hh: ev.tTo.hh,   mm: ev.tTo.mm });
+
+      let summary = ev.course || "Lesson";
+      if (opts.groupInTitle && ev.group) summary += ` (${ev.group})`;
+      if (opts.venueInTitle && ev.venue) summary += ` @ ${ev.venue}`;
+
+      let remarksClean = ev.remarks || "";
+      if (opts.stripRecorded) remarksClean = stripRecordedNotice(remarksClean);
+
+      const descLines = [
+        `Course: ${ev.course || ""}`.trim(),
+        ev.group ? `Group: ${ev.group}` : "",
+        ev.semType ? `Semester Type: ${ev.semType}` : "",
+        `Date: ${ev.dateStr} (${ev.dayStr})`,
+        `Time: ${pad2(ev.tFrom.hh)}:${pad2(ev.tFrom.mm)} - ${pad2(ev.tTo.hh)}:${pad2(ev.tTo.mm)}`
+      ].filter(Boolean);
+
+      if (ev.venue) descLines.push(`Venue: ${ev.venue}`);
+      if (remarksClean) descLines.push(`Remarks: ${remarksClean}`);
+
+      lines.push("BEGIN:VEVENT");
+      lines.push(foldLine(`UID:${escapeICS(uid)}`));
+      lines.push(`DTSTAMP:${dtstamp}`);
+      lines.push(foldLine(`SUMMARY:${escapeICS(summary)}`));
+      lines.push(foldLine(`DTSTART;TZID=${TZID}:${dtstart}`));
+      lines.push(foldLine(`DTEND;TZID=${TZID}:${dtend}`));
+      if (ev.venue) lines.push(foldLine(`LOCATION:${escapeICS(ev.venue)}`));
+      lines.push(foldLine(`DESCRIPTION:${escapeICS(descLines.join("\n"))}`));
+
+      if (opts.alarm) {
+        lines.push("BEGIN:VALARM");
+        lines.push("TRIGGER:-PT15M");
+        lines.push("ACTION:DISPLAY");
+        lines.push(foldLine(`DESCRIPTION:${escapeICS("Reminder: " + summary)}`));
+        lines.push("END:VALARM");
+      }
+
+      lines.push("END:VEVENT");
+    }
+
+    lines.push("END:VCALENDAR");
+    return lines.join("\r\n") + "\r\n";
+  }
+
+  // Cross-device: Share Sheet (mobile) → download (desktop) → open tab fallback
+  async function saveICS(filename, text) {
+    const blob = new Blob([text], { type: "text/calendar;charset=utf-8" });
+
+    try {
+      if (navigator.share) {
+        const file = new File([blob], filename, { type: blob.type });
+        const canShareFiles = navigator.canShare ? navigator.canShare({ files: [file] }) : true;
+        if (canShareFiles) {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        }
+      }
+    } catch {
+      // user cancelled / not supported -> fallback
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => {
+      try { window.open(url, "_blank", "noopener"); } catch {}
+      setTimeout(() => URL.revokeObjectURL(url), 8000);
+    }, 350);
+  }
+
+  function toPrettyTime(t) {
+    const hh24 = t.hh;
+    const mm = pad2(t.mm);
+    const ap = hh24 >= 12 ? "PM" : "AM";
+    let hh12 = hh24 % 12;
+    if (hh12 === 0) hh12 = 12;
+    return `${hh12}:${mm} ${ap}`;
+  }
+
+  function renderPreview(events, errors, opts) {
+    const previewPanel = document.getElementById("previewPanel");
+    const errorPanel = document.getElementById("errorPanel");
+    const summary = document.getElementById("summary");
+    const errBox = document.getElementById("errors");
+    const table = document.getElementById("previewTable");
+    const downloadBtn = document.getElementById("download");
+
+    if (!events.length) {
+      previewPanel.style.display = "none";
+      downloadBtn.disabled = true;
+
+      errorPanel.style.display = "block";
+      errBox.textContent =
+        "No events parsed.\n\n" +
+        (errors.length ? ("Notes:\n- " + errors.join("\n- ")) : "Try copying the timetable table again from the portal.");
+      return;
+    }
+
+    const venuesMissing = events.filter(e => !e.venue).length;
+
+    summary.textContent =
+      `✅ Parsed ${events.length} event(s)\n` +
+      `📍 Missing venue: ${venuesMissing}\n` +
+      `🧹 Remove “Lesson is recorded…”: ${opts.stripRecorded ? "on" : "off"}\n` +
+      `🧾 Mode: ${getMode() === "full" ? "Entire timetable" : "Single module"}\n` +
+      `🕒 Timezone: ${TZID}`;
+
+    const header = `
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Day</th>
+          <th>Time</th>
+          <th>Course</th>
+          <th>Group</th>
+          <th>Venue</th>
+          <th>Remarks (short)</th>
+        </tr>
+      </thead>
+    `;
+
+    const rows = events.map(e => {
+      const time = `${toPrettyTime(e.tFrom)} – ${toPrettyTime(e.tTo)}`;
+      const venue = e.venue ? e.venue : `<span class="pill">TBC</span>`;
+
+      let rem = e.remarks || "";
+      if (opts.stripRecorded) rem = stripRecordedNotice(rem);
+      const remarksShort = rem.slice(0, 80) + (rem.length > 80 ? "…" : "");
+
+      return `
+        <tr>
+          <td>${e.dateStr}</td>
+          <td>${e.dayStr}</td>
+          <td>${time}</td>
+          <td><b>${e.course || ""}</b></td>
+          <td>${e.group || ""}</td>
+          <td>${venue}</td>
+          <td>${remarksShort}</td>
+        </tr>
+      `;
+    }).join("");
+
+    table.innerHTML = header + `<tbody>${rows}</tbody>`;
+    previewPanel.style.display = "block";
+
+    if (errors.length) {
+      errorPanel.style.display = "block";
+      errBox.textContent = `Notes (${errors.length}):\n- ${errors.join("\n- ")}`;
+    } else {
+      errorPanel.style.display = "none";
+      errBox.textContent = "";
+    }
+
+    downloadBtn.disabled = false;
+  }
+
+  let lastParsed = { events: [], errors: [] };
+
+  function currentOpts() {
+    return {
+      alarm: document.getElementById("alarm").checked,
+      groupInTitle: document.getElementById("groupInTitle").checked,
+      venueInTitle: document.getElementById("venueInTitle").checked,
+      stripRecorded: document.getElementById("stripRecorded").checked
+    };
+  }
+
+  const input = document.getElementById("input");
+
+  async function doPreview() {
+    lastParsed = parseTimetableByMode(input.value || "");
+    renderPreview(lastParsed.events, lastParsed.errors, currentOpts());
+  }
+
+  // Show mobile hint on touch devices
+  const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  if (isTouch) document.getElementById("mobileHint").style.display = "block";
+
+  // Toggle meta box
+  function updateModeUI() {
+    const show = getMode() === "single";
+    document.getElementById("singleMeta").style.display = show ? "flex" : "none";
+  }
+  updateModeUI();
+
+  document.getElementById("modeFull").addEventListener("change", () => {
+    updateModeUI();
+    if (document.getElementById("previewPanel").style.display !== "none") doPreview();
+  });
+  document.getElementById("modeSingle").addEventListener("change", () => {
+    updateModeUI();
+    if (document.getElementById("previewPanel").style.display !== "none") doPreview();
+  });
+
+  // Re-preview when meta changes (only matters in single mode)
+  ["singleCourse","singleGroup","singleSemType"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => {
+      if (getMode() === "single" && document.getElementById("previewPanel").style.display !== "none") doPreview();
+    });
+  });
+
+  document.getElementById("paste").addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      input.value = text;
+      await doPreview();
+    } catch {
+      const errorPanel = document.getElementById("errorPanel");
+      const errBox = document.getElementById("errors");
+      errorPanel.style.display = "block";
+      errBox.textContent = "Clipboard paste was blocked by your browser. Tap the textbox and paste manually.";
+    }
+  });
+
+  document.getElementById("preview").addEventListener("click", doPreview);
+
+  ["alarm","groupInTitle","venueInTitle","stripRecorded"].forEach(id => {
+    document.getElementById(id).addEventListener("change", () => {
+      if (document.getElementById("previewPanel").style.display !== "none") doPreview();
+    });
+  });
+
+  document.getElementById("download").addEventListener("click", async () => {
+    lastParsed = parseTimetableByMode(input.value || "");
+    if (!lastParsed.events.length) {
+      renderPreview(lastParsed.events, lastParsed.errors, currentOpts());
+      return;
+    }
+
+    const opts = currentOpts();
+    const ics = buildICS(lastParsed.events, opts);
+
+    const now = new Date();
+    const fname = `suss-timetable-${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}.ics`;
+
+    await saveICS(fname, ics);
+  });
+})();
+</script>
+</body>
+</html>
